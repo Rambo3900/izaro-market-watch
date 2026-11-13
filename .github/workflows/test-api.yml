@@ -2,6 +2,12 @@ name: Izaro Market Watch
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/test-api.yml'
   schedule:
     - cron: '17 * * * *'  # hourly, UTC; manual run still available
 
