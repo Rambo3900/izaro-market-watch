@@ -1,81 +1,46 @@
-name: Izaro API Test
+name: Izaro Market Watch
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 * * * *'  # jede Stunde um Minute 17 (UTC)
+    - cron: '17 * * * *'  # hourly, UTC; manual run still available
+
+permissions:
+  contents: write
+
+concurrency:
+  group: izaro-market-watch
+  cancel-in-progress: false
 
 jobs:
-  test-api:
+  market-watch:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
-      - name: Poe ninja Challenge League API testen
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Run offline regression tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Fetch league and gem market
+        run: python3 scripts/market_watch.py
+
+      - name: Persist public market history
         run: |
-          python - <<'PY'
-          import json
-          import sys
-          import urllib.request
-          from urllib.parse import urlencode
-
-          BASE = "https://poe.ninja/poe1/api"
-
-          def fetch(url):
-              req = urllib.request.Request(
-                  url,
-                  headers={
-                      "User-Agent": "IzaroMarketWatch/0.2 (https://github.com/Rambo3900/izaro-market-watch)",
-                      "Accept": "application/json",
-                  },
-              )
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  return json.load(response)
-
-          print("=== IZARO MARKET WATCH ===", flush=True)
-          leagues = fetch(BASE + "/economy/leagues")
-          ids = [league["id"] for league in leagues]
-          print("Verfuegbare Ligen:", ", ".join(ids), flush=True)
-
-          # poe.ninja documents that the first entry is the current challenge league.
-          # Before launch the API can return only Standard and Hardcore.
-          if not ids or ids[0] in {"Standard", "Hardcore"}:
-              print("Challenge-Liga noch nicht verfuegbar. Ueberspringe diesen Lauf.")
-              sys.exit(0)
-
-          league = ids[0]
-          print("Challenge-Liga:", league, flush=True)
-          params = urlencode({"league": league, "type": "SkillGem"})
-          url = BASE + "/economy/stash/current/item/overview?" + params
-          data = fetch(url)
-          lines = data.get("lines", [])
-          if not lines:
-              print("Noch keine Gem-Preise verfuegbar. Ueberspringe diesen Lauf.")
-              sys.exit(0)
-
-          # First-pass filter, deliberately not a definitive transfigured-gem catalog.
-          # Ignore Vaal variants and high-level/high-quality listings for now.
-          transfigured = []
-          for gem in lines:
-              name = gem.get("name", "")
-              if " of " not in name or name.startswith("Vaal "):
-                  continue
-              level = gem.get("gemLevel")
-              quality = gem.get("gemQuality")
-              if isinstance(level, (int, float)) and level >= 20:
-                  continue
-              if isinstance(quality, (int, float)) and quality >= 20:
-                  continue
-              transfigured.append(gem)
-
-          print("Skill-Gem-Preiszeilen:", len(lines))
-          print("Transfigured-Kandidaten (Preiszeilen):", len(transfigured))
-          print("Beispiele:")
-          for gem in transfigured[:10]:
-              print(
-                  gem.get("name"),
-                  "Preis:", gem.get("chaosValue"),
-                  "Chaos | Level:", gem.get("gemLevel"),
-                  "| Qualitaet:", gem.get("gemQuality"),
-              )
-          print("CHALLENGE-LEAGUE-API-TEST ERFOLGREICH!")
-          PY
+          if [ ! -d data ]; then
+            echo "No challenge-league data yet; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No changed market data."
+          else
+            git commit -m "data: update poe1 transfigured gem market [skip ci]"
+            git push origin HEAD:main
+          fi
