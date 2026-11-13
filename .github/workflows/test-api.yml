@@ -2,6 +2,8 @@ name: Izaro API Test
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'  # jede Stunde um Minute 17 (UTC)
 
 jobs:
   test-api:
@@ -37,7 +39,8 @@ jobs:
           # poe.ninja documents that the first entry is the current challenge league.
           # Before launch the API can return only Standard and Hardcore.
           if not ids or ids[0] in {"Standard", "Hardcore"}:
-              sys.exit("Challenge-Liga noch nicht in poe.ninja verfuegbar. Kein Standard-Fallback.")
+              print("Challenge-Liga noch nicht verfuegbar. Ueberspringe diesen Lauf.")
+              sys.exit(0)
 
           league = ids[0]
           print("Challenge-Liga:", league, flush=True)
@@ -46,7 +49,8 @@ jobs:
           data = fetch(url)
           lines = data.get("lines", [])
           if not lines:
-              sys.exit("Keine Skill-Gem-Preise fuer die Challenge-Liga vorhanden.")
+              print("Noch keine Gem-Preise verfuegbar. Ueberspringe diesen Lauf.")
+              sys.exit(0)
 
           # First-pass filter, deliberately not a definitive transfigured-gem catalog.
           # Ignore Vaal variants and high-level/high-quality listings for now.
