@@ -290,7 +290,14 @@ def main() -> int:
             {"league": league, "type": "SkillGem"})
         payload = fetch(url)
         catalog = get_catalog(now)
-        market = extract(payload.get("lines"), catalog)
+        lines = payload.get("lines")
+        if isinstance(lines, list):
+            known = [line for line in lines
+                     if isinstance(line, dict) and line.get("name") in catalog]
+            valid = sum(1 for line in known if eligible(line))
+            print(f"poe.ninja SkillGem-Zeilen: {len(lines)}; Transfigured-Kandidaten: "
+                  f"{len(known)}; gueltige Level-1/0-Kandidaten: {valid}")
+        market = extract(lines, catalog)
         print("Vergleichbare unkorrumpierte Level-1/0-Gems:", len(market))
         if not market:
             print("Noch keine passenden Preise. OK.")
