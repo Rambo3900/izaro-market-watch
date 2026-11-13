@@ -260,9 +260,13 @@ def detect(current: dict, previous: dict, cooldown: dict, now: datetime) -> tupl
     prev_leader = leader(before)
     next_leader = leader(after)
     if prev_leader and next_leader and prev_leader[0] != next_leader[0]:
-        events.append({"type": "color_leader_change", "color": next_leader[0],
-                       "previous_color": prev_leader[0],
-                       "top10_mean_chaos": next_leader[1]})
+        qualified = sorted((v["top10_mean_chaos"] for v in after.values()
+                            if v["top10_mean_chaos"] is not None), reverse=True)
+        # A tiny crossing between colors is not an actionable market change.
+        if len(qualified) == 3 and qualified[0] >= qualified[1] * 1.10 and qualified[0] - qualified[1] >= 10:
+            events.append({"type": "color_leader_change", "color": next_leader[0],
+                           "previous_color": prev_leader[0],
+                           "top10_mean_chaos": next_leader[1]})
 
     priority = {"price_up": 0, "price_down": 1, "new_hot_gem": 2,
                 "top10_newcomer": 3, "color_leader_change": 4}
