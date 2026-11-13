@@ -25,6 +25,8 @@ REPOE = "https://repoe-fork.github.io/gems_minimal.json"
 UA = "IzaroMarketWatch/1.0 (https://github.com/Rambo3900/izaro-market-watch)"
 COLORS = {"r": "rot", "g": "gruen", "b": "blau"}
 MIN_LISTINGS = 4
+# Official 3.30 patch-note gem; RePoE may lag behind the league launch.
+CONFIRMED_PATCH_GEMS = {"Fireball of Radiation": "blau"}
 HISTORY_LIMIT = 14 * 24
 WATCHLIST = (
     "Poisonous Concoction of Bouncing",
@@ -95,6 +97,7 @@ def build_catalog(raw: Any) -> dict[str, str]:
                 and base.get("release_state", "released") == "released"
                 and color in COLORS):
             result[name] = COLORS[color]
+    result.update(CONFIRMED_PATCH_GEMS)
     if len(result) < 100:
         raise ValueError(f"Nur {len(result)} Transfigured Gems in RePoE gefunden")
     return result
@@ -105,7 +108,10 @@ def get_catalog(now: datetime) -> dict[str, str]:
     if isinstance(cached, dict) and isinstance(cached.get("gems"), dict):
         try:
             if now - date(cached["updated_at"]) < timedelta(hours=24):
-                return cached["gems"]
+                catalog = {**cached["gems"], **CONFIRMED_PATCH_GEMS}
+                if catalog != cached["gems"]:
+                    write(DATA / "catalog.json", {**cached, "gems": catalog})
+                return catalog
         except (KeyError, ValueError, TypeError):
             pass
     try:
