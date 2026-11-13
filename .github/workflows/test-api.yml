@@ -32,6 +32,15 @@ jobs:
       - name: Run offline regression tests
         run: python3 -m unittest discover -s tests -v
 
+      - name: Refresh RePoE gem-color catalog
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from scripts.market_watch import get_catalog
+          gems = get_catalog(datetime.now(timezone.utc))
+          print("Verified RePoE gem colors:", len(gems))
+          PY
+
       - name: Fetch league and gem market
         run: python3 scripts/market_watch.py
 
