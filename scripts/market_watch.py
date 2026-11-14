@@ -27,6 +27,18 @@ COLORS = {"r": "rot", "g": "gruen", "b": "blau"}
 MIN_LISTINGS = 4
 # Official 3.30 patch-note gem; RePoE may lag behind the league launch.
 CONFIRMED_PATCH_GEMS = {"Fireball of Radiation": "blau"}
+# Trarthan gems can drop from Heist gem chests, NOT from the Divine Font.
+# Their "of Trarthus" suffix must not be mistaken for Transfigured gems.
+NON_FONT_SUFFIXES = (" of Trarthus",)
+
+
+def is_font_eligible_name(name: str) -> bool:
+    return " of " in name and not name.startswith("Vaal ") and not name.endswith(NON_FONT_SUFFIXES)
+
+
+def exclude_non_font_gems(catalog: dict[str, str]) -> dict[str, str]:
+    return {name: color for name, color in catalog.items() if is_font_eligible_name(name)}
+
 HISTORY_LIMIT = 14 * 24
 WATCHLIST = (
     "Poisonous Concoction of Bouncing",
@@ -92,7 +104,7 @@ def build_catalog(raw: Any) -> dict[str, str]:
         name = gem.get("display_name")
         base = gem.get("base_item")
         color = gem.get("color")
-        if (isinstance(name, str) and " of " in name and not name.startswith("Vaal ")
+        if (isinstance(name, str) and is_font_eligible_name(name)
                 and isinstance(base, dict) and name != base.get("display_name")
                 and base.get("release_state", "released") == "released"
                 and color in COLORS):
@@ -108,14 +120,14 @@ def get_catalog(now: datetime) -> dict[str, str]:
     if isinstance(cached, dict) and isinstance(cached.get("gems"), dict):
         try:
             if now - date(cached["updated_at"]) < timedelta(hours=24):
-                catalog = {**cached["gems"], **CONFIRMED_PATCH_GEMS}
+                catalog = exclude_non_font_gems({**cached["gems"], **CONFIRMED_PATCH_GEMS})
                 if catalog != cached["gems"]:
                     write(DATA / "catalog.json", {**cached, "gems": catalog})
                 return catalog
         except (KeyError, ValueError, TypeError):
             pass
     try:
-        catalog = build_catalog(fetch(REPOE))
+        catalog = exclude_non_font_gems(build_catalog(fetch(REPOE)))
         write(DATA / "catalog.json", {
             "source": REPOE, "updated_at": iso(now), "gems": catalog
         })
@@ -124,7 +136,7 @@ def get_catalog(now: datetime) -> dict[str, str]:
     except Exception as exc:
         if isinstance(cached, dict) and len(cached.get("gems", {})) >= 100:
             print(f"WARNUNG: RePoE nicht erreichbar, verwende Cache: {exc}")
-            return cached["gems"]
+            return exclude_non_font_gems(cached["gems"])
         raise RuntimeError(f"Kein gültiger RePoE-Katalog verfügbar: {exc}") from exc
 
 
@@ -310,8 +322,16 @@ def main() -> int:
         state = read(DATA / "cooldowns.json", {})
         cooldown = state.get("gems", {}) if state.get("league") == league else {}
         if not isinstance(previous, dict): previous = {}
+        # Do not compare against historical entries that cannot come from the Font.
+        previous = {name: gem for name, gem in previous.items() if name in catalog}
         if not isinstance(samples, list): samples = []
+        # Remove erroneously tracked drop-only gems from retained price history.
+        samples = [{**sample, "prices": {name: price for name, price in sample["prices"].items()
+                                         if name in catalog}}
+                   for sample in samples if isinstance(sample, dict)
+                   and isinstance(sample.get("prices"), dict)]
         if not isinstance(cooldown, dict): cooldown = {}
+        cooldown = {name: state for name, state in cooldown.items() if name in catalog}
         events, cooldown = detect(market, previous, cooldown, now)
         stamp = iso(now)
         samples.append({"checked_at": stamp,
