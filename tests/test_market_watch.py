@@ -34,6 +34,9 @@ class IzaroTests(unittest.TestCase):
             {"display_name": "Vaal Ice Shot (Ice Shot of Penetration)", "color": "g",
              "is_support": False,
              "base_item": {"display_name": "Vaal Ice Shot", "release_state": "released"}},
+            {"display_name": "Bladefall of Trarthus", "color": "g",
+             "is_support": False,
+             "base_item": {"display_name": "Bladefall", "release_state": "released"}},
         ]
         items += [{"display_name": f"Gem {i} of Variant", "color": "b", "is_support": False,
                    "base_item": {"display_name": f"Gem {i}", "release_state": "released"}}
@@ -42,6 +45,34 @@ class IzaroTests(unittest.TestCase):
         self.assertEqual(catalog["Poisonous Concoction of Bouncing"], "gruen")
         self.assertNotIn("Wave of Conviction", catalog)
         self.assertNotIn("Vaal Ice Shot (Ice Shot of Penetration)", catalog)
+        self.assertNotIn("Bladefall of Trarthus", catalog)
+
+    def test_cached_catalog_purges_heist_only_trarthan_gems(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "catalog.json"
+            path.write_text(json.dumps({
+                "source": "RePoE", "updated_at": m.iso(NOW),
+                "gems": {"Bladefall of Trarthus": "gruen",
+                         "Heavy Strike of Trarthus": "rot",
+                         "Poisonous Concoction of Bouncing": "gruen"}
+            }))
+            with patch.object(m, "DATA", Path(td)), patch.object(m, "fetch",
+                                                                 side_effect=AssertionError("do not refetch")):
+                cleaned = m.get_catalog(NOW)
+            self.assertEqual(cleaned, {"Poisonous Concoction of Bouncing": "gruen"})
+            stored = json.loads(path.read_text())["gems"]
+            self.assertNotIn("Bladefall of Trarthus", stored)
+            self.assertNotIn("Heavy Strike of Trarthus", stored)
+
+    def test_drop_only_gem_does_not_enter_market(self):
+        catalog = m.exclude_non_font_gems({"Bladefall of Trarthus": "gruen",
+                                            "Bladefall of Impaling": "gruen"})
+        entries = [{"name": n, "gemLevel": 1, "gemQuality": 0,
+                    "chaosValue": 137 if n.endswith("Trarthus") else 3,
+                    "listingCount": 20, "count": 20, "corrupted": False}
+                   for n in ("Bladefall of Trarthus", "Bladefall of Impaling")]
+        result = m.extract(entries, catalog)
+        self.assertEqual(list(result), ["Bladefall of Impaling"])
 
     def test_unlevelled_and_corrupted_and_high_quality_filtered(self):
         catalog = {"Poisonous Concoction of Bouncing": "gruen"}
