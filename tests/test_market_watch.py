@@ -59,7 +59,8 @@ class IzaroTests(unittest.TestCase):
             with patch.object(m, "DATA", Path(td)), patch.object(m, "fetch",
                                                                  side_effect=AssertionError("do not refetch")):
                 cleaned = m.get_catalog(NOW)
-            self.assertEqual(cleaned, {"Poisonous Concoction of Bouncing": "gruen"})
+            self.assertEqual(cleaned, {"Poisonous Concoction of Bouncing": "gruen",
+                                       "Fireball of Radiation": "blau"})
             stored = json.loads(path.read_text())["gems"]
             self.assertNotIn("Bladefall of Trarthus", stored)
             self.assertNotIn("Heavy Strike of Trarthus", stored)
